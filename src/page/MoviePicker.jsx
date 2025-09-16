@@ -4,7 +4,8 @@ import { Film, ChevronRight, Check, Star, X } from 'lucide-react';
 import { FaPlus } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'https://localhost:7119/api';
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';   // recommender service
+const MOVIES_API = process.env.REACT_APP_MOVIES_API || 'https://localhost:7119/api/movies';
 const IMAGE_BASE = process.env.REACT_APP_IMAGE_URL || 'https://localhost:7119';
 
 const MoviePicker = () => {
@@ -37,11 +38,19 @@ const MoviePicker = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+  // Validation state
+  const [formErrors, setFormErrors] = useState({});
+
   // Fetch all movies for suggestions
   useEffect(() => {
-    axios.get(`${API_BASE}/movies`)
-      .then(res => setAllMovies(res.data.map(m => m.title.trim())))
+    axios.get(MOVIES_API, { withCredentials: false })
+      .then(res => {
+        const titles = res.data.map(m => m.title.trim());
+        setAllMovies(titles);
+      })
       .catch(err => console.error("Error fetching movies:", err));
+
+ 
   }, []);
 
   // Build image URL
@@ -85,13 +94,26 @@ const MoviePicker = () => {
       )
     : [];
 
-  // Filter movies API
+  // Filter movies API with validation
   const filterMovies = async () => {
     const selectedGenres = genres.filter(g => g.selected).map(g => g.name);
+
+    // Validation checks
+    const errors = {};
+    if (selectedGenres.length === 0) errors.genres = "Please select at least one genre.";
+    if (favoriteMovies.length === 0) errors.favorites = "Please add at least one favorite movie.";
+    if (!era) errors.era = "Please select a movie era.";
+
+    setFormErrors(errors);
+
+    // Stop if there are errors
+    if (Object.keys(errors).length > 0) return;
+
     const filters = { genres: selectedGenres, language: selectedLanguage, era, favoriteMovies };
+
     try {
-      const response = await axios.post(`${API_BASE}/Movies/filter`, filters);
-      setFilteredMovies(response.data);
+      const response = await axios.post(`${API_BASE}/recommend`, filters);
+      setFilteredMovies(response.data.results);
       setShowResults(true);
     } catch (error) {
       console.error('Error fetching movies:', error);
@@ -137,7 +159,7 @@ const MoviePicker = () => {
                       <h3 className="text-xl font-semibold">{movie.title}</h3>
                       <div className="flex items-center bg-red-600 px-2 py-1 rounded">
                         <Star size={16} className="mr-1" />
-                        <span>{movie.rating}</span>
+                        <span>{movie.score ? movie.score.toFixed(2) : '—'}</span>
                       </div>
                     </div>
                     <p className="text-gray-400 mb-2">{movie.year} • {movie.language}</p>
@@ -177,9 +199,10 @@ const MoviePicker = () => {
       ) : (
         <div className="min-h-screen bg-black/75 backdrop-blur-sm text-white p-12">
           <div className="max-w-2xl mx-auto bg-white/10 backdrop-blur-md rounded-xl shadow-2xl p-16">
+            
             {/* Genres */}
             <h2 className="text-2xl font-bold mb-6">Favorite Genres</h2>
-            <div className="grid grid-cols-3 gap-3 mb-8">
+            <div className="grid grid-cols-3 gap-3 mb-2">
               {genres.map((genre, index) => (
                 <button
                   key={index}
@@ -195,10 +218,11 @@ const MoviePicker = () => {
                 </button>
               ))}
             </div>
+            {formErrors.genres && <p className="text-red-500 text-sm mb-4">{formErrors.genres}</p>}
 
             {/* Favorite Movies */}
             <h2 className="text-2xl font-bold mb-3">Favorite Movies</h2>
-            <div className="space-y-3 mb-8">
+            <div className="space-y-3 mb-2">
               <div className="flex gap-2 relative">
                 <input
                   type="text"
@@ -232,6 +256,7 @@ const MoviePicker = () => {
                 ))}
               </div>
             </div>
+            {formErrors.favorites && <p className="text-red-500 text-sm mb-4">{formErrors.favorites}</p>}
 
             {/* Language */}
             <h2 className="text-2xl font-bold mb-4">Preferred Languages</h2>
@@ -249,7 +274,7 @@ const MoviePicker = () => {
 
             {/* Era */}
             <h2 className="text-2xl font-bold mb-4">Movie Era Preference</h2>
-            <div className="grid grid-cols-1 gap-3 mb-8">
+            <div className="grid grid-cols-1 gap-3 mb-2">
               {eras.map((eraOption) => (
                 <button
                   key={eraOption}
@@ -260,9 +285,10 @@ const MoviePicker = () => {
                 </button>
               ))}
             </div>
+            {formErrors.era && <p className="text-red-500 text-sm mb-4">{formErrors.era}</p>}
 
             {/* Buttons */}
-            <div className="flex justify-center gap-6">
+            <div className="flex justify-center gap-6 mt-6">
               <button onClick={() => setShowFilters(false)} className="bg-transparent border-2 border-white/30 text-white px-6 py-3 rounded-lg hover:bg-white/20">
                 Back
               </button>
